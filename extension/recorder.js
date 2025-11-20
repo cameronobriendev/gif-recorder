@@ -108,25 +108,39 @@ async function startRecording(streamId, siteName) {
       ctx.drawImage(videoElement, 0, 0);
 
       // Draw cursor at tracked position
-      if (cursorImage && cursorImage.complete) {
-        // Scale cursor position from CSS pixels to video pixels
-        const scaleX = canvas.width / videoElement.videoWidth;
-        const scaleY = canvas.height / videoElement.videoHeight;
-        const x = cursorX * scaleX;
-        const y = cursorY * scaleY;
+      const x = cursorX;
+      const y = cursorY;
 
+      // Draw cursor image or fallback
+      if (cursorImage && cursorImage.complete && cursorImage.naturalWidth > 0) {
         // Draw cursor (slightly larger if clicked)
         const size = cursorDown ? 24 : 20;
         ctx.drawImage(cursorImage, x, y, size, size);
+      } else {
+        // Fallback: draw a simple cursor shape
+        ctx.fillStyle = 'black';
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + 18);
+        ctx.lineTo(x + 4, y + 14);
+        ctx.lineTo(x + 7, y + 21);
+        ctx.lineTo(x + 10, y + 20);
+        ctx.lineTo(x + 7, y + 13);
+        ctx.lineTo(x + 12, y + 13);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
 
-        // Optional: draw click indicator
-        if (cursorDown) {
-          ctx.beginPath();
-          ctx.arc(x + 3, y + 3, 15, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
-          ctx.lineWidth = 3;
-          ctx.stroke();
-        }
+      // Draw click indicator
+      if (cursorDown) {
+        ctx.beginPath();
+        ctx.arc(x + 3, y + 3, 15, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
       }
 
       animationId = requestAnimationFrame(draw);
@@ -382,6 +396,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     cursorDown = true;
     cursorX = request.x;
     cursorY = request.y;
+    console.log('Cursor down at:', cursorX, cursorY);
   }
 
   if (request.action === 'cursorUp') {
