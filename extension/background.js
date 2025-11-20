@@ -117,12 +117,9 @@ chrome.action.onClicked.addListener(async () => {
     // Remove cursor tracker from target tab
     if (recordingTabId) {
       try {
-        await chrome.scripting.executeScript({
+        await chrome.scripting.removeCSS({
           target: { tabId: recordingTabId },
-          func: () => {
-            const style = document.getElementById('gif-recorder-cursor-hide');
-            if (style) style.remove();
-          }
+          css: `* { cursor: url('${chrome.runtime.getURL('icons/cursor-faint.png')}') 0 0, auto !important; }`
         });
       } catch (e) {
         // Tab may be closed
@@ -188,9 +185,53 @@ chrome.action.onClicked.addListener(async () => {
       }
 
       // Inject cursor tracker into target tab
+      await chrome.scripting.insertCSS({
+        target: { tabId: activeTab.id },
+        css: `* { cursor: url('${chrome.runtime.getURL('icons/cursor-faint.png')}') 0 0, auto !important; }`
+      });
+
       await chrome.scripting.executeScript({
         target: { tabId: activeTab.id },
-        files: ['cursor-tracker.js']
+        func: () => {
+          // Remove any existing listener
+          if (window._gifRecorderMouseMove) {
+            document.removeEventListener('mousemove', window._gifRecorderMouseMove);
+            document.removeEventListener('mousedown', window._gifRecorderMouseDown);
+            document.removeEventListener('mouseup', window._gifRecorderMouseUp);
+          }
+
+          let lastX = 0, lastY = 0;
+
+          window._gifRecorderMouseMove = (e) => {
+            lastX = e.clientX;
+            lastY = e.clientY;
+            chrome.runtime.sendMessage({
+              action: 'cursorMove',
+              x: e.clientX,
+              y: e.clientY
+            });
+          };
+
+          window._gifRecorderMouseDown = () => {
+            chrome.runtime.sendMessage({
+              action: 'cursorDown',
+              x: lastX,
+              y: lastY
+            });
+          };
+
+          window._gifRecorderMouseUp = () => {
+            chrome.runtime.sendMessage({
+              action: 'cursorUp',
+              x: lastX,
+              y: lastY
+            });
+          };
+
+          document.addEventListener('mousemove', window._gifRecorderMouseMove, { passive: true });
+          document.addEventListener('mousedown', window._gifRecorderMouseDown, { passive: true });
+          document.addEventListener('mouseup', window._gifRecorderMouseUp, { passive: true });
+        }
       });
 
       // Send to settings tab to start recording
