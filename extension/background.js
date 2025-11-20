@@ -86,7 +86,7 @@ async function updateIcon() {
   }
 
   // Get active tab
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
 
   if (activeTab && isRecordable(activeTab) && activeTab.id !== settingsTabId) {
     setReadyIcon();
@@ -149,7 +149,7 @@ chrome.action.onClicked.addListener(async () => {
   }
 
   // Get active tab
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
 
   // If on recordable tab, start recording
   if (activeTab && isRecordable(activeTab) && activeTab.id !== settingsTabId) {
