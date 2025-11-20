@@ -100,12 +100,24 @@ async function startRecording(streamId, siteName) {
     canvas.height = videoElement.videoHeight;
     ctx = canvas.getContext('2d');
 
+    console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+    console.log('Video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      throw new Error('Canvas has zero dimensions');
+    }
+
     // Start drawing loop
+    let frameCount = 0;
     function draw() {
       if (!recording) return;
 
       // Draw video frame
       ctx.drawImage(videoElement, 0, 0);
+      frameCount++;
+      if (frameCount % 60 === 0) {
+        console.log('Frames drawn:', frameCount);
+      }
 
       // Draw cursor at tracked position
       const x = cursorX;
@@ -147,9 +159,9 @@ async function startRecording(streamId, siteName) {
     }
     draw();
 
-    // Capture the canvas as a stream
-    const fps = parseInt(fpsSelect.value) || 10;
-    const canvasStream = canvas.captureStream(fps);
+    // Capture the canvas as a stream (no framerate = capture on every draw)
+    const canvasStream = canvas.captureStream();
+    console.log('Canvas stream tracks:', canvasStream.getTracks().length);
 
     // Setup MediaRecorder with canvas stream
     recordedChunks = [];
