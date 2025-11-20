@@ -167,24 +167,38 @@ async function startRecording(streamId, siteName) {
     };
 
     mediaRecorder.onstop = async () => {
-      // Stop animation loop
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
+      try {
+        console.log('MediaRecorder stopped, chunks:', recordedChunks.length);
+
+        // Stop animation loop
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+
+        // Stop streams
+        mediaStream.getTracks().forEach(track => track.stop());
+        canvasStream.getTracks().forEach(track => track.stop());
+
+        // Clean up
+        videoElement = null;
+        canvas = null;
+        ctx = null;
+
+        // Create blob and upload
+        const webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
+        console.log('Blob size:', webmBlob.size);
+
+        if (webmBlob.size === 0) {
+          setStatus('Error: No video data recorded', 'ready');
+          return;
+        }
+
+        await uploadAndConvert(webmBlob);
+      } catch (error) {
+        console.error('Error in onstop:', error);
+        setStatus('Error: ' + error.message, 'ready');
       }
-
-      // Stop streams
-      mediaStream.getTracks().forEach(track => track.stop());
-      canvasStream.getTracks().forEach(track => track.stop());
-
-      // Clean up
-      videoElement = null;
-      canvas = null;
-      ctx = null;
-
-      // Create blob and upload
-      const webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
-      await uploadAndConvert(webmBlob);
     };
 
     mediaRecorder.start(100);
