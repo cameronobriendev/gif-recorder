@@ -19,6 +19,29 @@ let downloadHistory = [];
 let activePolls = new Map();
 let currentSiteName = 'recording';
 
+// Cursor tracking
+let cursorX = 0;
+let cursorY = 0;
+let cursorDown = false;
+let cursorImage = null;
+let videoElement = null;
+let canvas = null;
+let ctx = null;
+let animationId = null;
+
+// Load cursor image
+function loadCursorImage() {
+  return new Promise((resolve) => {
+    cursorImage = new Image();
+    cursorImage.onload = () => resolve();
+    cursorImage.onerror = () => resolve(); // Continue even if cursor fails to load
+    cursorImage.src = 'icons/cursor.png';
+  });
+}
+
+// Initialize cursor image
+loadCursorImage();
+
 // Save settings to storage when changed
 fpsSelect.addEventListener('change', saveSettings);
 widthSelect.addEventListener('change', saveSettings);
@@ -56,14 +79,72 @@ async function startRecording(streamId, siteName) {
       }
     });
 
-    // Setup MediaRecorder
+    // Create video element to receive the stream
+    videoElement = document.createElement('video');
+    videoElement.srcObject = mediaStream;
+    videoElement.muted = true;
+    await videoElement.play();
+
+    // Wait for video dimensions
+    await new Promise(resolve => {
+      if (videoElement.videoWidth > 0) {
+        resolve();
+      } else {
+        videoElement.onloadedmetadata = resolve;
+      }
+    });
+
+    // Create canvas for compositing
+    canvas = document.createElement('canvas');
+    canvas.width = videoElement.videoWidth;
+    canvas.height = videoElement.videoHeight;
+    ctx = canvas.getContext('2d');
+
+    // Start drawing loop
+    function draw() {
+      if (!recording) return;
+
+      // Draw video frame
+      ctx.drawImage(videoElement, 0, 0);
+
+      // Draw cursor at tracked position
+      if (cursorImage && cursorImage.complete) {
+        // Scale cursor position from CSS pixels to video pixels
+        const scaleX = canvas.width / videoElement.videoWidth;
+        const scaleY = canvas.height / videoElement.videoHeight;
+        const x = cursorX * scaleX;
+        const y = cursorY * scaleY;
+
+        // Draw cursor (slightly larger if clicked)
+        const size = cursorDown ? 24 : 20;
+        ctx.drawImage(cursorImage, x, y, size, size);
+
+        // Optional: draw click indicator
+        if (cursorDown) {
+          ctx.beginPath();
+          ctx.arc(x + 3, y + 3, 15, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      }
+
+      animationId = requestAnimationFrame(draw);
+    }
+    draw();
+
+    // Capture the canvas as a stream
+    const fps = parseInt(fpsSelect.value) || 10;
+    const canvasStream = canvas.captureStream(fps);
+
+    // Setup MediaRecorder with canvas stream
     recordedChunks = [];
     const options = { mimeType: 'video/webm;codecs=vp9' };
     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
       options.mimeType = 'video/webm';
     }
 
-    mediaRecorder = new MediaRecorder(mediaStream, options);
+    mediaRecorder = new MediaRecorder(canvasStream, options);
 
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
@@ -72,7 +153,20 @@ async function startRecording(streamId, siteName) {
     };
 
     mediaRecorder.onstop = async () => {
+      // Stop animation loop
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      // Stop streams
       mediaStream.getTracks().forEach(track => track.stop());
+      canvasStream.getTracks().forEach(track => track.stop());
+
+      // Clean up
+      videoElement = null;
+      canvas = null;
+      ctx = null;
 
       // Create blob and upload
       const webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
@@ -276,5 +370,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'getRecordingState') {
     sendResponse({ recording });
+  }
+
+  // Cursor tracking events
+  if (request.action === 'cursorMove') {
+    cursorX = request.x;
+    cursorY = request.y;
+  }
+
+  if (request.action === 'cursorDown') {
+    cursorDown = true;
+    cursorX = request.x;
+    cursorY = request.y;
+  }
+
+  if (request.action === 'cursorUp') {
+    cursorDown = false;
   }
 });

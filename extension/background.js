@@ -114,6 +114,21 @@ chrome.action.onClicked.addListener(async () => {
     recording = false;
     stopRecordingAnimation();
 
+    // Remove cursor tracker from target tab
+    if (recordingTabId) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: recordingTabId },
+          func: () => {
+            const style = document.getElementById('gif-recorder-cursor-hide');
+            if (style) style.remove();
+          }
+        });
+      } catch (e) {
+        // Tab may be closed
+      }
+    }
+
     // Tell settings tab to stop recording
     if (settingsTabId) {
       try {
@@ -172,6 +187,12 @@ chrome.action.onClicked.addListener(async () => {
         siteName = 'recording';
       }
 
+      // Inject cursor tracker into target tab
+      await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        files: ['cursor-tracker.js']
+      });
+
       // Send to settings tab to start recording
       await chrome.tabs.sendMessage(settingsTabId, {
         action: 'startRecording',
@@ -205,8 +226,21 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
-// Listen for messages from settings tab
+// Listen for messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Relay cursor events from target tab to recorder tab
+  if (request.action === 'cursorMove' || request.action === 'cursorDown' || request.action === 'cursorUp') {
+    if (settingsTabId && recording) {
+      chrome.tabs.sendMessage(settingsTabId, request).catch(() => {});
+    }
+    return false;
+  }
+
+  if (request.action === 'cursorTrackingActive') {
+    console.log('Cursor tracking active in tab:', sender.tab?.id);
+    return false;
+  }
+
   if (request.action === 'recordingError') {
     recording = false;
     stopRecordingAnimation();
