@@ -1,0 +1,21 @@
+node_modules/
+.env
+*.log
+
+# Markdown files (except README)
+*.md
+!README.md
+
+# Server
+server/uploads/
+server/output/
+server/logs/
+
+# Extension config (contains API URL)
+extension/config.js
+
+# Extension build artifacts
+*.zip
+*.crx
+*.pem
+.DS_Store

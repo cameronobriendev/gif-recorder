@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>GIF Recorder</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 20px 0;
+      color: #333;
+    }
+
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .card h2 {
+      margin: 0 0 15px 0;
+      font-size: 18px;
+      color: #333;
+    }
+
+    /* Tab selector */
+    .tab-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    .tab-item {
+      padding: 10px 15px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .tab-item:last-child {
+      border-bottom: none;
+    }
+
+    .tab-item:hover {
+      background: #f5f5f5;
+    }
+
+    .tab-item.selected {
+      background: #e3f2fd;
+    }
+
+    .tab-item img {
+      width: 16px;
+      height: 16px;
+    }
+
+    .tab-item .title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-start {
+      background: #28a745;
+      color: white;
+    }
+
+    .btn-start:hover:not(:disabled) {
+      background: #218838;
+    }
+
+    .btn-stop {
+      background: #dc3545;
+      color: white;
+    }
+
+    .btn-stop:hover:not(:disabled) {
+      background: #c82333;
+    }
+
+    .btn-refresh {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-refresh:hover:not(:disabled) {
+      background: #5a6268;
+    }
+
+    /* Settings */
+    .settings {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+    }
+
+    .setting-group label {
+      display: block;
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+
+    .setting-group select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    /* Status */
+    .status {
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+
+    .status.ready {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .status.recording {
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    .status.processing {
+      background: #fff3e0;
+      color: #e65100;
+    }
+
+    /* Queue */
+    .queue-item {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+
+    .queue-item .info {
+      flex: 1;
+    }
+
+    .queue-item .job-id {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .queue-item .progress-bar {
+      width: 100px;
+      height: 6px;
+      background: #eee;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .queue-item .progress-fill {
+      height: 100%;
+      background: #007bff;
+      transition: width 0.3s;
+    }
+
+    .queue-item .status-text {
+      font-size: 12px;
+      margin-left: 10px;
+      color: #666;
+    }
+
+    /* Downloads */
+    .download-item {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+
+    .download-item .filename {
+      flex: 1;
+      font-size: 14px;
+    }
+
+    .download-item .time {
+      font-size: 12px;
+      color: #666;
+      margin-right: 10px;
+    }
+
+    .download-item .checkmark {
+      color: #28a745;
+    }
+
+    .download-item.new {
+      animation: highlight 2s ease-out;
+      background: #e8f5e9;
+    }
+
+    @keyframes highlight {
+      0% {
+        background: #a5d6a7;
+        transform: scale(1.02);
+      }
+      100% {
+        background: #e8f5e9;
+        transform: scale(1);
+      }
+    }
+
+    .empty-message {
+      color: #666;
+      font-style: italic;
+      text-align: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GIF Recorder</h1>
+
+    <!-- Status -->
+    <div class="status ready" id="status">Browse to any tab and click the green icon to record</div>
+
+    <!-- Recording Settings -->
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="settings">
+        <div class="setting-group">
+          <label>Frame Rate</label>
+          <select id="fps">
+            <option value="5">5 fps</option>
+            <option value="10" selected>10 fps</option>
+            <option value="15">15 fps</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label>Width</label>
+          <select id="width">
+            <option value="480">480p</option>
+            <option value="720" selected>720p</option>
+            <option value="1080">1080p</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label>Quality</label>
+          <select id="quality">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Queue -->
+    <div class="card">
+      <h2>Processing Queue</h2>
+      <div id="queue">
+        <div class="empty-message">No recordings in queue</div>
+      </div>
+    </div>
+
+    <!-- Download History -->
+    <div class="card">
+      <h2>Download History</h2>
+      <div id="downloads">
+        <div class="empty-message">No downloads yet</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="recorder.js"></script>
+</body>
+</html>

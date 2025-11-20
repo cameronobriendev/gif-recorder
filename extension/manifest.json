@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "GIF Recorder",
+  "version": "1.0.0",
+  "description": "Record your screen and convert to GIF",
+  "permissions": [
+    "tabCapture",
+    "tabs",
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_title": "GIF Recorder"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/light/icon16.png",
+    "48": "icons/light/icon48.png",
+    "128": "icons/light/icon128.png"
+  }
+}
