@@ -24,5 +24,9 @@
     "16": "icons/light/icon16.png",
     "48": "icons/light/icon48.png",
     "128": "icons/light/icon128.png"
-  }
+  },
+  "web_accessible_resources": [{
+    "resources": ["icons/cursor-faint.png"],
+    "matches": ["<all_urls>"]
+  }]
 }

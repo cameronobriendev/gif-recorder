@@ -1,9 +1,10 @@
 // Content script injected into target tab to track cursor position
 
-// Hide system cursor
+// Replace system cursor with faint version for navigation
+const cursorUrl = chrome.runtime.getURL('icons/cursor-faint.png');
 const style = document.createElement('style');
 style.id = 'gif-recorder-cursor-hide';
-style.textContent = '* { cursor: none !important; }';
+style.textContent = `* { cursor: url('${cursorUrl}') 0 0, auto !important; }`;
 document.head.appendChild(style);
 
 // Track mouse position
