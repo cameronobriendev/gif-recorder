@@ -201,8 +201,8 @@ async function startRecording(streamId, siteName) {
       }
     };
 
-    mediaRecorder.start(100);
     recording = true;
+    mediaRecorder.start(100);
 
   } catch (error) {
     console.error('Start recording error:', error);
