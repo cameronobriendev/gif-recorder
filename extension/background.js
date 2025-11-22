@@ -114,18 +114,6 @@ chrome.action.onClicked.addListener(async () => {
     recording = false;
     stopRecordingAnimation();
 
-    // Remove cursor tracker from target tab
-    if (recordingTabId) {
-      try {
-        await chrome.scripting.removeCSS({
-          target: { tabId: recordingTabId },
-          css: `* { cursor: url('${chrome.runtime.getURL('icons/cursor-faint.png')}') 0 0, auto !important; }`
-        });
-      } catch (e) {
-        // Tab may be closed
-      }
-    }
-
     // Tell settings tab to stop recording
     if (settingsTabId) {
       try {
@@ -163,95 +151,35 @@ chrome.action.onClicked.addListener(async () => {
   // Get active tab
   const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
 
-  // If on recordable tab, start recording
-  if (activeTab && isRecordable(activeTab) && activeTab.id !== settingsTabId) {
-    try {
-      // Get stream ID for the active tab
-      const streamId = await chrome.tabCapture.getMediaStreamId({
-        targetTabId: activeTab.id
-      });
-
-      recordingTabId = activeTab.id;
-      recording = true;
-      startRecordingAnimation();
-
-      // Get site name from URL
-      let siteName = 'recording';
+  // Start recording - user will pick what to record via getDisplayMedia picker
+  try {
+    // Get site name from current tab for filename
+    let siteName = 'recording';
+    if (activeTab && activeTab.url) {
       try {
         const url = new URL(activeTab.url);
         siteName = url.hostname.replace(/^www\./, '').replace(/\./g, '-');
       } catch (e) {
         siteName = 'recording';
       }
-
-      // Inject cursor tracker into target tab
-      await chrome.scripting.insertCSS({
-        target: { tabId: activeTab.id },
-        css: `* { cursor: url('${chrome.runtime.getURL('icons/cursor-faint.png')}') 0 0, auto !important; }`
-      });
-
-      await chrome.scripting.executeScript({
-        target: { tabId: activeTab.id },
-        func: () => {
-          // Remove any existing listener
-          if (window._gifRecorderMouseMove) {
-            document.removeEventListener('mousemove', window._gifRecorderMouseMove);
-            document.removeEventListener('mousedown', window._gifRecorderMouseDown);
-            document.removeEventListener('mouseup', window._gifRecorderMouseUp);
-          }
-
-          let lastX = 0, lastY = 0;
-
-          window._gifRecorderMouseMove = (e) => {
-            lastX = e.clientX;
-            lastY = e.clientY;
-            chrome.runtime.sendMessage({
-              action: 'cursorMove',
-              x: e.clientX,
-              y: e.clientY
-            });
-          };
-
-          window._gifRecorderMouseDown = () => {
-            chrome.runtime.sendMessage({
-              action: 'cursorDown',
-              x: lastX,
-              y: lastY
-            });
-          };
-
-          window._gifRecorderMouseUp = () => {
-            chrome.runtime.sendMessage({
-              action: 'cursorUp',
-              x: lastX,
-              y: lastY
-            });
-          };
-
-          document.addEventListener('mousemove', window._gifRecorderMouseMove, { passive: true });
-          document.addEventListener('mousedown', window._gifRecorderMouseDown, { passive: true });
-          document.addEventListener('mouseup', window._gifRecorderMouseUp, { passive: true });
-        }
-      });
-
-      // Send to settings tab to start recording
-      await chrome.tabs.sendMessage(settingsTabId, {
-        action: 'startRecording',
-        streamId: streamId,
-        siteName: siteName
-      });
-
-    } catch (error) {
-      console.error('Start recording error:', error);
-      recording = false;
-      stopRecordingAnimation();
-      await updateIcon();
     }
-  } else {
-    // On non-recordable tab, just focus settings
+
+    // Focus settings tab and start recording (shows picker dialog)
     chrome.tabs.update(settingsTabId, { active: true });
     const tab = await chrome.tabs.get(settingsTabId);
     chrome.windows.update(tab.windowId, { focused: true });
+
+    // Send to settings tab to start recording
+    await chrome.tabs.sendMessage(settingsTabId, {
+      action: 'startRecording',
+      siteName: siteName
+    });
+
+  } catch (error) {
+    console.error('Start recording error:', error);
+    recording = false;
+    stopRecordingAnimation();
+    await updateIcon();
   }
 });
 
@@ -269,17 +197,10 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
 // Listen for messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  // Relay cursor events from target tab to recorder tab
-  if (request.action === 'cursorMove' || request.action === 'cursorDown' || request.action === 'cursorUp') {
-    if (settingsTabId && recording) {
-      chrome.tabs.sendMessage(settingsTabId, request).catch(() => {});
-    }
-    return false;
-  }
-
-  if (request.action === 'cursorTrackingActive') {
-    console.log('Cursor tracking active in tab:', sender.tab?.id);
-    return false;
+  if (request.action === 'recordingStarted') {
+    recording = true;
+    startRecordingAnimation();
+    sendResponse({ received: true });
   }
 
   if (request.action === 'recordingError') {

@@ -8,6 +8,19 @@ const widthSelect = document.getElementById('width');
 const qualitySelect = document.getElementById('quality');
 const queueEl = document.getElementById('queue');
 const downloadsEl = document.getElementById('downloads');
+const recordBtn = document.getElementById('recordBtn');
+const recordBtnText = document.getElementById('recordBtnText');
+
+// Record button click handler
+recordBtn.addEventListener('click', async () => {
+  if (recording) {
+    stopRecording();
+    recordBtn.classList.remove('recording');
+    recordBtnText.textContent = 'Record';
+  } else {
+    startRecording(null, 'recording');
+  }
+});
 
 // State
 let recording = false;
@@ -18,29 +31,6 @@ let jobQueue = [];
 let downloadHistory = [];
 let activePolls = new Map();
 let currentSiteName = 'recording';
-
-// Cursor tracking
-let cursorX = 0;
-let cursorY = 0;
-let cursorDown = false;
-let cursorImage = null;
-let videoElement = null;
-let canvas = null;
-let ctx = null;
-let animationId = null;
-
-// Load cursor image
-function loadCursorImage() {
-  return new Promise((resolve) => {
-    cursorImage = new Image();
-    cursorImage.onload = () => resolve();
-    cursorImage.onerror = () => resolve(); // Continue even if cursor fails to load
-    cursorImage.src = 'icons/cursor.png';
-  });
-}
-
-// Initialize cursor image
-loadCursorImage();
 
 // Save settings to storage when changed
 fpsSelect.addEventListener('change', saveSettings);
@@ -65,112 +55,28 @@ chrome.storage.local.get(['fps', 'width', 'quality'], (result) => {
 // Start recording (called via message from background)
 async function startRecording(streamId, siteName) {
   try {
-    setStatus('Recording...', 'recording');
+    setStatus('Select tab to record...', 'processing');
     currentSiteName = siteName || 'recording';
 
-    // Get media stream using the stream ID from background
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
+    // Use getDisplayMedia for correct cursor positioning on Retina
+    mediaStream = await navigator.mediaDevices.getDisplayMedia({
       video: {
-        mandatory: {
-          chromeMediaSource: 'tab',
-          chromeMediaSourceId: streamId
-        }
-      }
+        cursor: "always",
+        frameRate: 30
+      },
+      audio: false
     });
 
-    // Create video element to receive the stream
-    videoElement = document.createElement('video');
-    videoElement.srcObject = mediaStream;
-    videoElement.muted = true;
-    await videoElement.play();
+    setStatus('Recording...', 'recording');
 
-    // Wait for video dimensions
-    await new Promise(resolve => {
-      if (videoElement.videoWidth > 0) {
-        resolve();
-      } else {
-        videoElement.onloadedmetadata = resolve;
-      }
-    });
-
-    // Create canvas for compositing
-    canvas = document.createElement('canvas');
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
-    ctx = canvas.getContext('2d');
-
-    console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
-    console.log('Video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
-
-    if (canvas.width === 0 || canvas.height === 0) {
-      throw new Error('Canvas has zero dimensions');
-    }
-
-    // Start drawing loop
-    let frameCount = 0;
-    function draw() {
-      if (!recording) return;
-
-      // Draw video frame
-      ctx.drawImage(videoElement, 0, 0);
-      frameCount++;
-      if (frameCount % 60 === 0) {
-        console.log('Frames drawn:', frameCount);
-      }
-
-      // Draw cursor at tracked position
-      const x = cursorX;
-      const y = cursorY;
-
-      // Draw cursor image or fallback
-      if (cursorImage && cursorImage.complete && cursorImage.naturalWidth > 0) {
-        // Draw cursor (slightly larger if clicked)
-        const size = cursorDown ? 24 : 20;
-        ctx.drawImage(cursorImage, x, y, size, size);
-      } else {
-        // Fallback: draw a simple cursor shape
-        ctx.fillStyle = 'black';
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, y + 18);
-        ctx.lineTo(x + 4, y + 14);
-        ctx.lineTo(x + 7, y + 21);
-        ctx.lineTo(x + 10, y + 20);
-        ctx.lineTo(x + 7, y + 13);
-        ctx.lineTo(x + 12, y + 13);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
-
-      // Draw click indicator
-      if (cursorDown) {
-        ctx.beginPath();
-        ctx.arc(x + 3, y + 3, 15, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      }
-
-      animationId = requestAnimationFrame(draw);
-    }
-    draw();
-
-    // Capture the canvas as a stream (no framerate = capture on every draw)
-    const canvasStream = canvas.captureStream();
-    console.log('Canvas stream tracks:', canvasStream.getTracks().length);
-
-    // Setup MediaRecorder with canvas stream
+    // Setup MediaRecorder
     recordedChunks = [];
     const options = { mimeType: 'video/webm;codecs=vp9' };
     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
       options.mimeType = 'video/webm';
     }
 
-    mediaRecorder = new MediaRecorder(canvasStream, options);
+    mediaRecorder = new MediaRecorder(mediaStream, options);
 
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
@@ -179,46 +85,28 @@ async function startRecording(streamId, siteName) {
     };
 
     mediaRecorder.onstop = async () => {
-      try {
-        console.log('MediaRecorder stopped, chunks:', recordedChunks.length);
+      mediaStream.getTracks().forEach(track => track.stop());
 
-        // Stop animation loop
-        if (animationId) {
-          cancelAnimationFrame(animationId);
-          animationId = null;
-        }
-
-        // Stop streams
-        mediaStream.getTracks().forEach(track => track.stop());
-        canvasStream.getTracks().forEach(track => track.stop());
-
-        // Clean up
-        videoElement = null;
-        canvas = null;
-        ctx = null;
-
-        // Create blob and upload
-        const webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
-        console.log('Blob size:', webmBlob.size);
-
-        if (webmBlob.size === 0) {
-          setStatus('Error: No video data recorded', 'ready');
-          return;
-        }
-
-        await uploadAndConvert(webmBlob);
-      } catch (error) {
-        console.error('Error in onstop:', error);
-        setStatus('Error: ' + error.message, 'ready');
-      }
+      // Create blob and upload
+      const webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
+      await uploadAndConvert(webmBlob);
     };
 
-    recording = true;
     mediaRecorder.start(100);
+    recording = true;
+
+    // Update button state
+    recordBtn.classList.add('recording');
+    recordBtnText.textContent = 'Stop';
+
+    // Notify background that recording started
+    chrome.runtime.sendMessage({ action: 'recordingStarted' });
 
   } catch (error) {
     console.error('Start recording error:', error);
     setStatus('Error: ' + error.message, 'ready');
+    recordBtn.classList.remove('recording');
+    recordBtnText.textContent = 'Record';
     chrome.runtime.sendMessage({ action: 'recordingError', error: error.message });
   }
 }
@@ -405,27 +293,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'stopRecording') {
     stopRecording();
+    recordBtn.classList.remove('recording');
+    recordBtnText.textContent = 'Record';
     sendResponse({ success: true });
   }
 
   if (request.action === 'getRecordingState') {
     sendResponse({ recording });
-  }
-
-  // Cursor tracking events
-  if (request.action === 'cursorMove') {
-    cursorX = request.x;
-    cursorY = request.y;
-  }
-
-  if (request.action === 'cursorDown') {
-    cursorDown = true;
-    cursorX = request.x;
-    cursorY = request.y;
-    console.log('Cursor down at:', cursorX, cursorY);
-  }
-
-  if (request.action === 'cursorUp') {
-    cursorDown = false;
   }
 });

@@ -26,6 +26,48 @@
       color: #333;
     }
 
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .header h1 {
+      margin: 0;
+    }
+
+    .btn-record {
+      background: #dc3545;
+      color: white;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-record:hover:not(:disabled) {
+      background: #c82333;
+    }
+
+    .btn-record .dot {
+      width: 6px;
+      height: 6px;
+      background: white;
+      border-radius: 50%;
+    }
+
+    .btn-record.recording .dot {
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
     .card {
       background: white;
       border-radius: 8px;
@@ -264,10 +306,16 @@
 </head>
 <body>
   <div class="container">
-    <h1>GIF Recorder</h1>
+    <div class="header">
+      <h1>GIF Recorder</h1>
+      <button class="btn-record" id="recordBtn">
+        <span class="dot"></span>
+        <span id="recordBtnText">Record</span>
+      </button>
+    </div>
 
     <!-- Status -->
-    <div class="status ready" id="status">Browse to any tab and click the green icon to record</div>
+    <div class="status ready" id="status">Click Record to start capturing</div>
 
     <!-- Recording Settings -->
     <div class="card">
