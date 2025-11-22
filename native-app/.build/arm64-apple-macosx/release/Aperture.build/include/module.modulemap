@@ -1,0 +1,3 @@
+module Aperture {
+    header "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/include/Aperture-Swift.h"
+}

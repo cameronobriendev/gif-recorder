@@ -1,137 +1,185 @@
 # GIF Recorder
 
-Chrome extension that records screen content and converts to GIF using server-side processing.
+Chrome extension with native macOS app that records browser windows and converts to GIF using server-side processing.
 
 ![Settings Page](settings.png)
 
 ## Features
 
-- Record any tab, window, or screen with one click
-- Server-side WebM to GIF conversion (ffmpeg with palette optimization)
+- **Native macOS screen capture** using ScreenCaptureKit for perfect cursor positioning
+- Record browser window content with one click (green icon = ready)
+- Server-side MP4 to GIF conversion (ffmpeg with palette optimization)
 - Animated icon shows recording state (green = ready, red pulse = recording)
-- Auto-download with smart filenames: `site-name_Nov20-2025-230pm.gif`
-- Queue system for multiple recordings
+- Auto-download with smart filenames: `recording_Nov22-2025-230pm.gif`
+- Queue system with real-time progress tracking
 - Configurable FPS, resolution, and quality
 - Settings persist between sessions
+
+## Architecture
+
+```
+Click Record → Native App (ScreenCaptureKit) → MP4 → Upload → Server (ffmpeg) → GIF Download
+```
+
+The extension uses Chrome's Native Messaging to communicate with a Swift app that handles screen capture using macOS ScreenCaptureKit. This solves the cursor position bug on Retina displays that affects browser-based capture APIs.
 
 ## Components
 
 ### `/extension` - Chrome Extension
-- Records screen content using `navigator.mediaDevices.getDisplayMedia`
-- Uploads WebM to server for conversion
+- UI for settings and recording controls
+- Native Messaging communication with macOS app
 - Auto-downloads completed GIFs
 
-### `/server` - Conversion API
+### `/native-app` - macOS Swift App
+- ScreenCaptureKit for window capture
+- AVAssetWriter for H.264 encoding
+- Uploads MP4 to server for conversion
+
+### `/server` - Conversion API (Digital Ocean)
 - Express server with ffmpeg
-- Converts WebM to GIF with palette optimization
+- Converts MP4 to GIF with palette optimization
 - Background job processing with progress tracking
 - Auto-cleanup after 1 hour
 
-## Quick Start
+## Installation
 
-### 1. Deploy Server
+### 1. Build Native App
 
 ```bash
-# Copy to your server
+cd native-app
+swift build -c release
+
+# Create app bundle
+mkdir -p ~/Apps/GifRecorder.app/Contents/MacOS
+cp .build/release/GifRecorder ~/Apps/GifRecorder.app/Contents/MacOS/
+```
+
+Create `~/Apps/GifRecorder.app/Contents/Info.plist`:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.cameron.gifrecorder</string>
+    <key>CFBundleName</key>
+    <string>GifRecorder</string>
+    <key>CFBundleExecutable</key>
+    <string>GifRecorder</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>GIF Recorder needs screen access to record your screen.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+</dict>
+</plist>
+```
+
+### 2. Install Native Messaging Manifest
+
+Create `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.cameron.gifrecorder.json`:
+```json
+{
+  "name": "com.cameron.gifrecorder",
+  "description": "GIF Screen Recorder Native Helper",
+  "path": "/Users/YOUR_USERNAME/Apps/GifRecorder.app/Contents/MacOS/GifRecorder",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://YOUR_EXTENSION_ID/"
+  ]
+}
+```
+
+### 3. Grant Screen Recording Permission
+
+**System Settings → Privacy & Security → Screen Recording** → Add `GifRecorder.app`
+
+### 4. Deploy Server
+
+```bash
 scp -r server/* root@YOUR_IP:/var/www/gif-converter-api/
 
-# SSH and install
 ssh root@YOUR_IP
 cd /var/www/gif-converter-api
-apt install ffmpeg  # if not installed
+apt install ffmpeg
 npm install
 pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
-### 2. Configure Extension
+### 5. Configure Extension
 
 ```bash
 cd extension
 cp config.example.js config.js
 ```
 
-Edit `config.js` with your server URL:
+Edit `config.js`:
 ```javascript
 const CONFIG = {
   API_URL: 'http://YOUR_IP:3005'
 };
 ```
 
-### 3. Load Extension
+### 6. Load Extension
 
 1. Open Chrome/Vivaldi: `chrome://extensions/`
 2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select the `extension/` folder
+3. Click "Load unpacked" → select `extension/` folder
+4. Copy the Extension ID
+5. Update the native messaging manifest with the Extension ID
 
 ## Usage
 
-1. **Click extension icon** - Opens settings tab
-2. **Click Record button** - System picker dialog appears
-3. **Select what to record** - Choose tab, window, or entire screen
-4. **Recording starts** - Button changes to "Stop" with pulsing indicator
-5. **Click Stop** - Recording ends, upload begins
-6. **GIF auto-downloads** when conversion completes
-
-You can also click the extension icon while recording to stop.
+1. **Click extension icon** - Opens settings tab (icon turns green when ready)
+2. **Click green icon** - Starts recording the browser window immediately
+3. **Click red pulsing icon** - Stops recording, returns to settings
+4. **GIF auto-downloads** when conversion completes
 
 ## Settings
 
-- **FPS**: 5/10/15 fps (default: 10)
+- **FPS**: 5/10/15/30 fps (default: 10)
 - **Width**: 480p/720p/1080p (default: 720p)
 - **Quality**: Low/Medium/High (default: Medium)
-
-Defaults are optimized for GitHub READMEs. Settings persist between recordings.
-
-## Architecture
-
-```
-Click Record → getDisplayMedia Picker → MediaRecorder → WebM Upload → Server (ffmpeg) → GIF Download
-```
 
 ## Technical Challenges & Solutions
 
 ### Cursor Position Offset on macOS Retina
 
-**Problem**: When using `chrome.tabCapture` API on macOS Retina displays, cursor position had vertical offset errors. The cursor appeared compressed toward the vertical center - the further from center, the larger the error.
+**Problem**: Browser capture APIs (`tabCapture`, `getDisplayMedia`) have cursor positioning bugs on Retina displays.
 
-**Root Cause**: Chrome's tabCapture coordinate transformation pipeline has vertical-specific bugs:
-- Browser chrome offset calculation (no horizontal equivalent)
-- Y-axis coordinate system inversion between macOS (bottom-left origin) and browser (top-left origin)
-- CSS pixels vs physical pixels ambiguity with devicePixelRatio
+**Solution**: Native macOS app using ScreenCaptureKit handles cursor coordinate transformations correctly.
 
-**Solution**: Switched from `tabCapture` to `getDisplayMedia()` API which handles cursor coordinate transformations correctly. This is the same approach used by professional tools like Loom. Trade-off: requires user to select capture target via system picker.
+### Window-Only Capture
 
-### WebM Duration Metadata Missing
+**Problem**: Need to capture only the browser window, not the entire screen.
 
-**Problem**: MediaRecorder creates WebM files without proper duration metadata (`Duration: N/A`), causing ffmpeg to fail with exit code 190.
+**Solution**: Use `SCContentFilter` with display capture and `excludingWindows` to show only the target window, then crop to window bounds using `sourceRect`.
 
-**Solution**: Server now handles WebM files without duration gracefully - ffmpeg can still process them, duration is estimated from frame count.
+### Pixel Buffer to Video Encoding
 
-### Dynamic Resolution During Recording
+**Problem**: ScreenCaptureKit outputs CVPixelBuffers, but AVAssetWriterInput expects encoded video data.
 
-**Problem**: When recording windows that resize, the video resolution changes mid-stream (e.g., 1454x766 → 1454x724), causing ffmpeg filter graph error: "Internal bug, should not have happened."
+**Solution**: Use `AVAssetWriterInputPixelBufferAdaptor` to properly convert pixel buffers to H.264 encoded video.
 
-**Root Cause**: The two-pass palette generation approach fails when resolution changes between passes because the palette was generated for the original resolution.
+### Browser Detection
 
-**Solution**: Switched to single-pass conversion using ffmpeg's `split` filter:
-```bash
--vf "fps=10,scale=720:-1:flags=lanczos:force_original_aspect_ratio=decrease,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
-```
-This generates the palette and applies it in one pass, handling resolution changes gracefully.
+**Problem**: Need to find the correct browser window to record.
 
-### Background Tab Throttling
+**Solution**: Support multiple Chromium browsers (Chrome, Vivaldi, Arc, Brave, Edge) by checking bundle identifiers and selecting the largest window.
 
-**Problem**: When using canvas overlay approach with `requestAnimationFrame`, recording would produce 0 frames because rAF pauses when tab loses focus.
+## Supported Browsers
 
-**Solution**: Use `setInterval` instead of `requestAnimationFrame` for any processing that needs to continue in background tabs.
-
-### getDisplayMedia Must Be Called from Focused Page
-
-**Problem**: Wanted to keep user on their current tab while showing the capture picker, but `getDisplayMedia()` requires the calling page to be focused and visible.
-
-**Solution**: Extension switches to recorder tab before triggering getDisplayMedia. Added convenient Record button on the settings page so users don't need to click the extension icon twice.
+- Google Chrome
+- Vivaldi
+- Arc
+- Brave
+- Microsoft Edge
+- Chromium
 
 ## Server Requirements
 
@@ -141,8 +189,8 @@ This generates the palette and applies it in one pass, handling resolution chang
 
 ## Server Endpoints
 
-- `POST /convert` - Upload WebM for conversion
-- `GET /status/:jobId` - Check job progress (1% increments)
+- `POST /convert` - Upload MP4 for conversion
+- `GET /status/:jobId` - Check job progress
 - `GET /download/:jobId` - Download completed GIF
 - `DELETE /cleanup/:jobId` - Manual cleanup
 

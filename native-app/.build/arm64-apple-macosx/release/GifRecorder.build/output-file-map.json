@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/GifRecorder.d",
+    "object": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/GifRecorder.o",
+    "swift-dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/master.swiftdeps"
+  },
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/Sources/main.swift": {
+    "object": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main.swift.o",
+    "swiftmodule": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main.swiftdeps",
+    "diagnostics": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main.dia"
+  }
+}

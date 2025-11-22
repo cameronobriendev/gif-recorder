@@ -1,12 +1,17 @@
 {
   "manifest_version": 3,
   "name": "GIF Recorder",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Record your screen and convert to GIF",
   "permissions": [
     "tabs",
     "storage",
-    "downloads"
+    "downloads",
+    "nativeMessaging",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "action": {
     "default_title": "GIF Recorder"

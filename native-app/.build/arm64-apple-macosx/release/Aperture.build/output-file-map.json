@@ -1,0 +1,25 @@
+{
+  "": {
+    "dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Aperture.d",
+    "object": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Aperture.o",
+    "swift-dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/master.swiftdeps"
+  },
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/checkouts/Aperture/Sources/Aperture/Aperture.swift": {
+    "object": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Aperture.swift.o",
+    "swiftmodule": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Aperture~partial.swiftmodule",
+    "swift-dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Aperture.swiftdeps",
+    "diagnostics": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Aperture.dia"
+  },
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/checkouts/Aperture/Sources/Aperture/Devices.swift": {
+    "object": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Devices.swift.o",
+    "swiftmodule": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Devices~partial.swiftmodule",
+    "swift-dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Devices.swiftdeps",
+    "diagnostics": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Devices.dia"
+  },
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/checkouts/Aperture/Sources/Aperture/Utilities.swift": {
+    "object": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Utilities.swift.o",
+    "swiftmodule": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Utilities~partial.swiftmodule",
+    "swift-dependencies": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Utilities.swiftdeps",
+    "diagnostics": "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Aperture.build/Utilities.dia"
+  }
+}

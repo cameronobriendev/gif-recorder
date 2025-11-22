@@ -1,6 +1,3 @@
-// API endpoint from config
-const API_URL = CONFIG.API_URL;
-
 // DOM elements
 const statusEl = document.getElementById('status');
 const fpsSelect = document.getElementById('fps');
@@ -11,26 +8,10 @@ const downloadsEl = document.getElementById('downloads');
 const recordBtn = document.getElementById('recordBtn');
 const recordBtnText = document.getElementById('recordBtnText');
 
-// Record button click handler
-recordBtn.addEventListener('click', async () => {
-  if (recording) {
-    stopRecording();
-    recordBtn.classList.remove('recording');
-    recordBtnText.textContent = 'Record';
-  } else {
-    startRecording(null, 'recording');
-  }
-});
-
 // State
 let recording = false;
-let mediaRecorder = null;
-let recordedChunks = [];
-let mediaStream = null;
-let jobQueue = [];
 let downloadHistory = [];
-let activePolls = new Map();
-let currentSiteName = 'recording';
+let currentJob = null;
 
 // Save settings to storage when changed
 fpsSelect.addEventListener('change', saveSettings);
@@ -52,214 +33,132 @@ chrome.storage.local.get(['fps', 'width', 'quality'], (result) => {
   if (result.quality) qualitySelect.value = result.quality;
 });
 
-// Start recording (called via message from background)
-async function startRecording(streamId, siteName) {
-  try {
-    setStatus('Select tab to record...', 'processing');
-    currentSiteName = siteName || 'recording';
-
-    // Use getDisplayMedia for correct cursor positioning on Retina
-    mediaStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        cursor: "always",
-        frameRate: 30
-      },
-      audio: false
+// Record button click handler
+recordBtn.addEventListener('click', async () => {
+  if (recording) {
+    // Stop recording
+    chrome.runtime.sendMessage({
+      action: 'stopRecording',
+      fps: parseInt(fpsSelect.value),
+      width: parseInt(widthSelect.value),
+      quality: qualitySelect.value
     });
-
-    setStatus('Recording...', 'recording');
-
-    // Setup MediaRecorder
-    recordedChunks = [];
-    const options = { mimeType: 'video/webm;codecs=vp9' };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options.mimeType = 'video/webm';
-    }
-
-    mediaRecorder = new MediaRecorder(mediaStream, options);
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        recordedChunks.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = async () => {
-      mediaStream.getTracks().forEach(track => track.stop());
-
-      // Create blob and upload
-      const webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
-      await uploadAndConvert(webmBlob);
-    };
-
-    mediaRecorder.start(100);
-    recording = true;
-
-    // Update button state
-    recordBtn.classList.add('recording');
-    recordBtnText.textContent = 'Stop';
-
-    // Notify background that recording started
-    chrome.runtime.sendMessage({ action: 'recordingStarted' });
-
-  } catch (error) {
-    console.error('Start recording error:', error);
-    setStatus('Error: ' + error.message, 'ready');
-    recordBtn.classList.remove('recording');
-    recordBtnText.textContent = 'Record';
-    chrome.runtime.sendMessage({ action: 'recordingError', error: error.message });
-  }
-}
-
-// Stop recording (called via message from background)
-async function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  }
-
-  recording = false;
-  setStatus('Processing...', 'processing');
-}
-
-// Upload and convert
-async function uploadAndConvert(webmBlob) {
-  try {
-    setStatus('Uploading...', 'processing');
-
-    const formData = new FormData();
-    formData.append('video', webmBlob, 'recording.webm');
-    formData.append('fps', fpsSelect.value);
-    formData.append('width', widthSelect.value);
-    formData.append('quality', qualitySelect.value);
-
-    const response = await fetch(`${API_URL}/convert`, {
-      method: 'POST',
-      body: formData
+  } else {
+    // Start recording
+    chrome.runtime.sendMessage({
+      action: 'startRecording',
+      fps: parseInt(fpsSelect.value),
+      width: parseInt(widthSelect.value),
+      quality: qualitySelect.value
     });
-
-    if (!response.ok) {
-      throw new Error('Upload failed');
-    }
-
-    const data = await response.json();
-
-    // Add to queue
-    const job = {
-      id: data.jobId,
-      progress: 0,
-      status: 'processing',
-      startTime: Date.now()
-    };
-    jobQueue.push(job);
-    updateQueueDisplay();
-
-    // Start polling
-    pollJobStatus(job);
-
-    setStatus('Ready to record', 'ready');
-
-  } catch (error) {
-    console.error('Upload error:', error);
-    setStatus('Upload failed: ' + error.message, 'ready');
+    setStatus('Starting...', 'processing');
   }
-}
+});
 
-// Poll job status
-function pollJobStatus(job) {
-  const pollInterval = setInterval(async () => {
-    try {
-      const response = await fetch(`${API_URL}/status/${job.id}`);
-      const data = await response.json();
+// Handle native status updates from background
+function handleNativeStatus(data) {
+  switch (data.status) {
+    case 'recording_started':
+      recording = true;
+      recordBtn.classList.add('recording');
+      recordBtnText.textContent = 'Stop';
+      setStatus('Recording...', 'recording');
+      break;
 
-      job.progress = data.progress;
-      job.status = data.status;
+    case 'uploading':
+      recording = false;
+      recordBtn.classList.remove('recording');
+      recordBtnText.textContent = 'Record';
+      setStatus('Uploading...', 'processing');
+
+      // Create job for queue display
+      currentJob = {
+        id: 'native-job',
+        progress: 0,
+        status: 'uploading'
+      };
       updateQueueDisplay();
+      break;
 
-      if (data.status === 'completed') {
-        clearInterval(pollInterval);
-        activePolls.delete(job.id);
-
-        // Auto-download with site name and datetime
-        const now = new Date();
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const month = months[now.getMonth()];
-        const day = now.getDate();
-        const year = now.getFullYear();
-        let hours = now.getHours();
-        const minutes = now.getMinutes().toString().padStart(2, '0');
-        const ampm = hours >= 12 ? 'pm' : 'am';
-        hours = hours % 12 || 12;
-        const datetime = `${month}${day}-${year}-${hours}${minutes}${ampm}`;
-        const filename = `${currentSiteName}_${datetime}.gif`;
-        await autoDownload(job, filename);
-
-        // Move to history
-        jobQueue = jobQueue.filter(j => j.id !== job.id);
-        downloadHistory.unshift({
-          id: job.id,
-          filename: filename,
-          time: new Date().toLocaleTimeString(),
-          isNew: true
-        });
-
-        updateQueueDisplay();
-        updateDownloadsDisplay();
-        setStatus('Download complete!', 'ready');
-
-        // Remove "new" highlight after animation
-        setTimeout(() => {
-          if (downloadHistory[0]) {
-            downloadHistory[0].isNew = false;
-            updateDownloadsDisplay();
-          }
-        }, 2000);
-
-      } else if (data.status === 'failed') {
-        clearInterval(pollInterval);
-        activePolls.delete(job.id);
-        job.status = 'failed';
-        job.error = data.error;
+    case 'processing':
+      if (currentJob) {
+        currentJob.progress = data.progress || 0;
+        currentJob.status = 'processing';
         updateQueueDisplay();
       }
-    } catch (error) {
-      console.error('Poll error:', error);
-    }
-  }, 2000);
+      setStatus(`Converting... ${data.progress || 0}%`, 'processing');
+      break;
 
-  activePolls.set(job.id, pollInterval);
-}
+    case 'complete':
+      if (currentJob) {
+        currentJob.progress = 100;
+        currentJob.status = 'completed';
+        updateQueueDisplay();
+      }
 
-// Auto-download
-async function autoDownload(job, filename) {
-  try {
-    chrome.downloads.download({
-      url: `${API_URL}/download/${job.id}`,
-      filename: filename,
-      saveAs: false
-    });
-  } catch (error) {
-    console.error('Download error:', error);
+      // Extract filename from filepath
+      const filepath = data.filepath || '';
+      const filename = filepath.split('/').pop() || 'recording.gif';
+
+      // Add to download history
+      downloadHistory.unshift({
+        id: 'dl-' + Date.now(),
+        filename: filename,
+        time: new Date().toLocaleTimeString(),
+        isNew: true
+      });
+
+      currentJob = null;
+      updateQueueDisplay();
+      updateDownloadsDisplay();
+      setStatus('Saved to Downloads!', 'ready');
+
+      // Remove "new" highlight after animation
+      setTimeout(() => {
+        if (downloadHistory[0]) {
+          downloadHistory[0].isNew = false;
+          updateDownloadsDisplay();
+        }
+      }, 2000);
+      break;
+
+    case 'error':
+      recording = false;
+      recordBtn.classList.remove('recording');
+      recordBtnText.textContent = 'Record';
+      currentJob = null;
+      updateQueueDisplay();
+      setStatus('Error: ' + (data.error || 'Unknown error'), 'ready');
+      break;
+
+    case 'pong':
+      // Native app is connected
+      console.log('Native app connected');
+      break;
+
+    default:
+      console.log('Unknown native status:', data.status);
   }
 }
 
 // Update queue display
 function updateQueueDisplay() {
-  if (jobQueue.length === 0) {
+  if (!currentJob) {
     queueEl.innerHTML = '<div class="empty-message">No recordings in queue</div>';
     return;
   }
 
-  queueEl.innerHTML = jobQueue.map(job => `
+  queueEl.innerHTML = `
     <div class="queue-item">
       <div class="info">
-        <div class="job-id">${job.id.substring(0, 8)}...</div>
+        <div class="job-id">${currentJob.status}</div>
       </div>
       <div class="progress-bar">
-        <div class="progress-fill" style="width: ${job.progress}%"></div>
+        <div class="progress-fill" style="width: ${currentJob.progress}%"></div>
       </div>
-      <span class="status-text">${job.progress}%</span>
+      <span class="status-text">${currentJob.progress}%</span>
     </div>
-  `).join('');
+  `;
 }
 
 // Update downloads display
@@ -286,19 +185,19 @@ function setStatus(text, type) {
 
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'startRecording') {
-    startRecording(request.streamId, request.siteName);
-    sendResponse({ success: true });
-  }
-
-  if (request.action === 'stopRecording') {
-    stopRecording();
-    recordBtn.classList.remove('recording');
-    recordBtnText.textContent = 'Record';
+  if (request.action === 'nativeStatus') {
+    handleNativeStatus(request.data);
     sendResponse({ success: true });
   }
 
   if (request.action === 'getRecordingState') {
     sendResponse({ recording });
   }
+
+  return true;
 });
+
+// Initial state
+setStatus('Ready to record', 'ready');
+updateQueueDisplay();
+updateDownloadsDisplay();

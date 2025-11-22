@@ -1,0 +1,30 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "aperture",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/wulkano/Aperture",
+          "name" : "Aperture"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "ddfb0fc1b3c789339dd5fd9296ba8076d292611c",
+            "version" : "2.0.1"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "Aperture"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

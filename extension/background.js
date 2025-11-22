@@ -5,7 +5,7 @@ importScripts('config.js');
 let recording = false;
 let spinInterval = null;
 let settingsTabId = null;
-let recordingTabId = null;
+let nativePort = null;
 
 // Icon setters
 function setDefaultIcon() {
@@ -69,9 +69,8 @@ function isRecordable(tab) {
 
 // Update icon based on current state
 async function updateIcon() {
-  if (recording) return; // Don't change during recording
+  if (recording) return;
 
-  // Check if settings tab exists
   if (!settingsTabId) {
     setDefaultIcon();
     return;
@@ -85,7 +84,6 @@ async function updateIcon() {
     return;
   }
 
-  // Get active tab
   const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
 
   if (activeTab && isRecordable(activeTab) && activeTab.id !== settingsTabId) {
@@ -93,6 +91,61 @@ async function updateIcon() {
   } else {
     setDefaultIcon();
   }
+}
+
+// Connect to native app
+function connectNative() {
+  if (nativePort) {
+    return nativePort;
+  }
+
+  nativePort = chrome.runtime.connectNative('com.cameron.gifrecorder');
+
+  nativePort.onMessage.addListener((message) => {
+    console.log('Native message:', message);
+
+    // Forward to settings tab
+    if (settingsTabId) {
+      chrome.tabs.sendMessage(settingsTabId, {
+        action: 'nativeStatus',
+        data: message
+      }).catch(() => {});
+    }
+
+    // Handle status changes
+    if (message.status === 'recording_started') {
+      recording = true;
+      startRecordingAnimation();
+    } else if (message.status === 'complete' || message.status === 'error') {
+      recording = false;
+      stopRecordingAnimation();
+      updateIcon();
+    }
+  });
+
+  nativePort.onDisconnect.addListener(() => {
+    console.log('Native app disconnected');
+    if (chrome.runtime.lastError) {
+      console.error('Error:', chrome.runtime.lastError.message);
+
+      // Notify settings tab of error
+      if (settingsTabId) {
+        chrome.tabs.sendMessage(settingsTabId, {
+          action: 'nativeStatus',
+          data: {
+            status: 'error',
+            error: chrome.runtime.lastError.message
+          }
+        }).catch(() => {});
+      }
+    }
+    nativePort = null;
+    recording = false;
+    stopRecordingAnimation();
+    updateIcon();
+  });
+
+  return nativePort;
 }
 
 // Initialize icon
@@ -109,24 +162,23 @@ chrome.windows.onFocusChanged.addListener(async () => {
 
 // Handle icon click
 chrome.action.onClicked.addListener(async () => {
-  // If recording, stop and switch to settings
+  // If recording, stop and go to settings
   if (recording) {
+    if (nativePort) {
+      nativePort.postMessage({ command: 'stop' });
+    }
+    // Immediately reset icon to ready state
     recording = false;
     stopRecordingAnimation();
-
-    // Tell settings tab to stop recording
+    setReadyIcon();
+    // Focus settings tab to see progress
     if (settingsTabId) {
       try {
-        await chrome.tabs.sendMessage(settingsTabId, { action: 'stopRecording' });
         chrome.tabs.update(settingsTabId, { active: true });
         const tab = await chrome.tabs.get(settingsTabId);
         chrome.windows.update(tab.windowId, { focused: true });
-      } catch (e) {
-        console.error('Error stopping recording:', e);
-      }
+      } catch (e) {}
     }
-
-    await updateIcon();
     return;
   }
 
@@ -148,66 +200,122 @@ chrome.action.onClicked.addListener(async () => {
     return;
   }
 
-  // Get active tab
+  // Check if we're on a recordable tab (green icon state)
   const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-
-  // Start recording - user will pick what to record via getDisplayMedia picker
-  try {
-    // Get site name from current tab for filename
-    let siteName = 'recording';
-    if (activeTab && activeTab.url) {
-      try {
-        const url = new URL(activeTab.url);
-        siteName = url.hostname.replace(/^www\./, '').replace(/\./g, '-');
-      } catch (e) {
-        siteName = 'recording';
-      }
+  if (activeTab && isRecordable(activeTab) && activeTab.id !== settingsTabId) {
+    // Get viewport dimensions from active tab
+    let viewport = null;
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: () => ({
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          screenX: window.screenX,
+          screenY: window.screenY,
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight,
+          devicePixelRatio: window.devicePixelRatio
+        })
+      });
+      viewport = results[0].result;
+    } catch (e) {
+      console.error('Failed to get viewport:', e);
     }
 
-    // Focus settings tab and start recording (shows picker dialog)
-    chrome.tabs.update(settingsTabId, { active: true });
-    const tab = await chrome.tabs.get(settingsTabId);
-    chrome.windows.update(tab.windowId, { focused: true });
-
-    // Send to settings tab to start recording
-    await chrome.tabs.sendMessage(settingsTabId, {
-      action: 'startRecording',
-      siteName: siteName
+    // Start recording directly - get settings from storage
+    const settings = await chrome.storage.local.get(['fps', 'width', 'quality']);
+    const port = connectNative();
+    port.postMessage({
+      command: 'start',
+      options: {
+        fps: parseInt(settings.fps) || 30,
+        width: parseInt(settings.width) || 720,
+        quality: settings.quality || 'medium',
+        viewport: viewport
+      }
     });
-
-  } catch (error) {
-    console.error('Start recording error:', error);
-    recording = false;
-    stopRecordingAnimation();
-    await updateIcon();
+    return;
   }
+
+  // Focus settings tab (grey icon state or on settings tab)
+  chrome.tabs.update(settingsTabId, { active: true });
+  const tab = await chrome.tabs.get(settingsTabId);
+  chrome.windows.update(tab.windowId, { focused: true });
 });
 
 // Track when settings tab is closed
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   if (tabId === settingsTabId) {
     settingsTabId = null;
-    if (recording) {
-      recording = false;
-      stopRecordingAnimation();
+    if (recording && nativePort) {
+      nativePort.postMessage({ command: 'stop' });
     }
+    recording = false;
+    stopRecordingAnimation();
     await updateIcon();
   }
 });
 
-// Listen for messages
+// Listen for messages from settings tab
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'recordingStarted') {
-    recording = true;
-    startRecordingAnimation();
-    sendResponse({ received: true });
+  if (request.action === 'startRecording') {
+    // Get viewport from active tab
+    (async () => {
+      const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      let viewport = null;
+      if (activeTab && activeTab.id !== settingsTabId) {
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: () => ({
+              innerWidth: window.innerWidth,
+              innerHeight: window.innerHeight,
+              screenX: window.screenX,
+              screenY: window.screenY,
+              outerWidth: window.outerWidth,
+              outerHeight: window.outerHeight,
+              devicePixelRatio: window.devicePixelRatio
+            })
+          });
+          viewport = results[0].result;
+        } catch (e) {
+          console.error('Failed to get viewport:', e);
+        }
+      }
+
+      const port = connectNative();
+      port.postMessage({
+        command: 'start',
+        options: {
+          fps: request.fps || 30,
+          width: request.width || 720,
+          quality: request.quality || 'medium',
+          viewport: viewport
+        }
+      });
+      sendResponse({ success: true });
+    })();
+    return true; // Keep channel open for async response
   }
 
-  if (request.action === 'recordingError') {
-    recording = false;
-    stopRecordingAnimation();
-    updateIcon();
-    sendResponse({ received: true });
+  if (request.action === 'stopRecording') {
+    if (nativePort) {
+      nativePort.postMessage({
+        command: 'stop',
+        options: {
+          fps: request.fps || 10,
+          width: request.width || 720,
+          quality: request.quality || 'medium'
+        }
+      });
+    }
+    sendResponse({ success: true });
   }
-  return false;
+
+  if (request.action === 'getRecordingState') {
+    sendResponse({ recording });
+  }
+
+  return true;
 });

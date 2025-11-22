@@ -1,0 +1,66 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "GifRecorder-arm64-apple-macosx26.0-release.exe": ["<GifRecorder-arm64-apple-macosx26.0-release.exe>"]
+  "GifRecorder-arm64-apple-macosx26.0-release.module": ["<GifRecorder-arm64-apple-macosx26.0-release.module>"]
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<GifRecorder-arm64-apple-macosx26.0-release.exe>","<GifRecorder-arm64-apple-macosx26.0-release.module>"]
+  "test": ["<GifRecorder-arm64-apple-macosx26.0-release.exe>","<GifRecorder-arm64-apple-macosx26.0-release.module>"]
+default: "main"
+nodes:
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/Sources/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+commands:
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/Sources/main.swift"]
+    outputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/sources"]
+    description: "Write auxiliary file /Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/sources"
+
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main.swift.o"]
+    outputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.product/Objects.LinkFileList"
+
+  "/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Library/Developer/CommandLineTools/usr/bin/swiftc"]
+    outputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt"
+
+  "<GifRecorder-arm64-apple-macosx26.0-release.exe>":
+    tool: phony
+    inputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder"]
+    outputs: ["<GifRecorder-arm64-apple-macosx26.0-release.exe>"]
+
+  "<GifRecorder-arm64-apple-macosx26.0-release.module>":
+    tool: phony
+    inputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main.swift.o","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Modules/GifRecorder.swiftmodule"]
+    outputs: ["<GifRecorder-arm64-apple-macosx26.0-release.module>"]
+
+  "C.GifRecorder-arm64-apple-macosx26.0-release.exe":
+    tool: shell
+    inputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main.swift.o","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.product/Objects.LinkFileList"]
+    outputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder"]
+    description: "Linking ./.build/arm64-apple-macosx/release/GifRecorder"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-L","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release","-o","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder","-module-name","GifRecorder","-Xlinker","-no_warn_duplicate_libraries","-emit-executable","-Xlinker","-dead_strip","-Xlinker","-alias","-Xlinker","_GifRecorder_main","-Xlinker","_main","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.product/Objects.LinkFileList","-target","arm64-apple-macosx13.0","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g"]
+
+  "C.GifRecorder-arm64-apple-macosx26.0-release.module":
+    tool: shell
+    inputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/Sources/main.swift","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/swift-version--1AB21518FC5DEDBE.txt","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/sources"]
+    outputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/main.swift.o","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Modules/GifRecorder.swiftmodule"]
+    description: "Compiling Swift Module 'GifRecorder' (1 sources)"
+    args: ["/Library/Developer/CommandLineTools/usr/bin/swiftc","-module-name","GifRecorder","-emit-dependencies","-emit-module","-emit-module-path","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Modules/GifRecorder.swiftmodule","-output-file-map","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/output-file-map.json","-whole-module-optimization","-num-threads","8","-c","@/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/GifRecorder.build/sources","-I","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/Modules","-target","arm64-apple-macosx13.0","-whole-module-optimization","-num-threads","8","-serialize-diagnostics","-O","-j8","-DSWIFT_PACKAGE","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/.build/arm64-apple-macosx/release/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","GifRecorder_main","-swift-version","5","-I","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-L","/Library/Developer/CommandLineTools/Library/Developer/Frameworks","-plugin-path","/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","native_app"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/camobrien/Documents/GitHub/gif-recorder/native-app/Sources/","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/Package.swift","/Users/camobrien/Documents/GitHub/gif-recorder/native-app/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
